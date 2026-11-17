@@ -1,4 +1,3 @@
-import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -38,8 +37,7 @@ def write_file(path: str, content: str) -> str:
     return f"Записано: {path}"
 
 
-
-TOOLS: list[FunctionToolParam] = [
+FILE_TOOLS: list[FunctionToolParam] = [
     {
         "type": "function",
         "name": "list_files",
@@ -97,20 +95,8 @@ TOOLS: list[FunctionToolParam] = [
     },
 ]
 
-FUNCTIONS: dict[str, Callable[..., str]] = {
+FILE_FUNCTIONS: dict[str, Callable[..., str]] = {
     "list_files": list_files,
     "read_file": read_file,
     "write_file": write_file,
 }
-
-
-def execute_tool(name: str, arguments: str) -> str:
-    handler = FUNCTIONS.get(name)
-
-    if handler is None:
-        return f"Неизвестный инструмент: {name}"
-    
-    try:
-        return handler(**json.loads(arguments or "{}"))
-    except Exception as e:
-        return f"Ошибка: {e}"
