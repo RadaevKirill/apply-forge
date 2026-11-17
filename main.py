@@ -10,5 +10,5 @@ if __name__ == '__main__':
         if prompt.lower() in ("exit", "quit"):
             break
 
-        response = run(settings, prompt)
-        print(f"Agent > {response}")
+        print("Agent > ", end="", flush=True)
+        run(settings, prompt)
