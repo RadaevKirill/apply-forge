@@ -5,14 +5,17 @@ from openai.types.responses import FunctionToolParam
 
 from src.tools.browser import BROWSER_FUNCTIONS, BROWSER_TOOLS
 from src.tools.files import FILE_FUNCTIONS, FILE_TOOLS
+from src.tools.pdf import PDF_FUNCTIONS, PDF_TOOLS
 
 TOOLS: list[FunctionToolParam] = [
     *FILE_TOOLS,
+    *PDF_TOOLS,
     *BROWSER_TOOLS,
 ]
 
 FUNCTIONS: dict[str, Callable[..., str]] = {
     **FILE_FUNCTIONS,
+    **PDF_FUNCTIONS,
     **BROWSER_FUNCTIONS,
 }
 
