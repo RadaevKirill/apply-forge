@@ -8,4 +8,5 @@ dependencies = [
     "openai",
     "playwright>=1.65.2",
     "python-dotenv>=1.2.4",
+    "weasyprint>=70.0",
 ]

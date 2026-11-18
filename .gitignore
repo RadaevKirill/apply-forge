@@ -9,3 +9,8 @@ wheels/
 # Virtual environments
 .venv
 .env
+
+# Assets: в git только анкета и инструкция
+assets/*
+!assets/instruction.txt
+!assets/анкета_кандидата.md

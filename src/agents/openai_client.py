@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from openai import OpenAI
@@ -5,6 +7,36 @@ from openai.types.responses import Response, ResponseFunctionToolCall
 
 from src.settings import Settings
 from src.tools.common import TOOLS, execute_tool
+
+INSTRUCTIONS_PATH = Path("assets/instruction.txt")
+
+
+@dataclass
+class TokenUsage:
+    """Счётчик токенов. Используется и для одного сообщения, и для суммы за сессию."""
+    input_tokens: int = 0
+    cached_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+
+    def add(self, other: "TokenUsage") -> None:
+        self.input_tokens += other.input_tokens
+        self.cached_tokens += other.cached_tokens
+        self.output_tokens += other.output_tokens
+        self.total_tokens += other.total_tokens
+
+    @classmethod
+    def from_response(cls, response: Response) -> "TokenUsage":
+        usage = response.usage
+        if not usage:
+            return cls()
+        details = usage.input_tokens_details
+        return cls(
+            input_tokens=usage.input_tokens or 0,
+            cached_tokens=(details.cached_tokens if details else 0) or 0,
+            output_tokens=usage.output_tokens or 0,
+            total_tokens=usage.total_tokens or 0,
+        )
 
 
 def create_client(settings: Settings) -> OpenAI:
@@ -14,10 +46,16 @@ def create_client(settings: Settings) -> OpenAI:
     return OpenAI(api_key=settings.llm_api_key, base_url=settings.llm_url)
 
 
-def stream_response(client: OpenAI, settings: Settings, history: list[Any]) -> Response:
+def load_instructions() -> str:
+    """Читает системную инструкцию агента из assets/instruction.txt."""
+    return INSTRUCTIONS_PATH.read_text(encoding="utf-8")
+
+
+def stream_response(client: OpenAI, settings: Settings, instructions: str, history: list[Any]) -> Response:
     """Отправляет историю в API, печатает текст по мере поступления и возвращает итоговый Response."""
     stream = client.responses.create(
         model=settings.llm_model,
+        instructions=instructions,
         input=history,
         tools=TOOLS,
         prompt_cache_key=settings.llm_cache_key,
@@ -36,14 +74,13 @@ def stream_response(client: OpenAI, settings: Settings, history: list[Any]) -> R
     return final
 
 
-def print_usage(response: Response) -> None:
-    """Выводит статистику использования кэша, если API её вернул."""
-    usage = response.usage
-    if usage:
-        print(
-            f"\n[CACHE] cached={usage.input_tokens_details.cached_tokens} "
-            f"input={usage.input_tokens}"
-        )
+def print_usage(usage: TokenUsage) -> None:
+    """Выводит статистику токенов одного запроса к API."""
+    print(
+        f"\n[TOKENS] запрос: total={usage.total_tokens} "
+        f"input={usage.input_tokens} (cached={usage.cached_tokens}) "
+        f"output={usage.output_tokens}"
+    )
 
 
 def execute_tool_calls(history: list[Any], tool_calls: list[ResponseFunctionToolCall]) -> None:
@@ -58,21 +95,25 @@ def execute_tool_calls(history: list[Any], tool_calls: list[ResponseFunctionTool
         })
 
 
-def run(settings: Settings, content: str) -> str:
-    """Запускает цикл агента: запрос к модели, вызов инструментов, повтор, пока модель не ответит текстом."""
+def run(settings: Settings, content: str) -> tuple[str, TokenUsage]:
+    """Запускает цикл агента. Возвращает текст ответа и сумму токенов по всем запросам этого сообщения."""
     client = create_client(settings)
+    instructions = load_instructions()
     history: list[Any] = [{"role": "user", "content": content}]
+    message_usage = TokenUsage()
 
     for _ in range(settings.llm_max_steps):
-        response = stream_response(client, settings, history)
-        print_usage(response)
+        response = stream_response(client, settings, instructions, history)
+        request_usage = TokenUsage.from_response(response)
+        message_usage.add(request_usage)
+        print_usage(request_usage)
         history.extend(item.model_dump(exclude_none=True) for item in response.output)
 
         tool_calls = [item for item in response.output if item.type == "function_call"]
         print()
 
         if not tool_calls:
-            return response.output_text
+            return response.output_text, message_usage
 
         execute_tool_calls(history, tool_calls)
 
